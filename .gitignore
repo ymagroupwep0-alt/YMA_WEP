@@ -1,0 +1,16 @@
+node_modules
+.next
+out
+npm-debug.log*
+.DS_Store
+.env
+.env.local
+.env.*.local
+
+cookies.txt
+temp_check_users.ts
+temp_login_check.ts
+temp_verify_password.ts
+tsconfig.tsbuildinfo
+
+public/uploads/

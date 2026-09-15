@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply bg-slate-100 text-slate-800 antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.fixed.inset-0 form.space-y-5 {
+  max-height: calc(90vh - 5rem);
+  overflow-y: auto;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #e2e8f0;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 9999px;
+}
+
+@layer components {
+  .card-surface {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-soft;
+  }
+
+  .table-header {
+    @apply text-center align-middle text-xs font-semibold uppercase tracking-[0.12em] text-slate-500;
+  }
+
+  .data-table th,
+  .data-table td {
+    @apply text-center align-middle;
+  }
+}

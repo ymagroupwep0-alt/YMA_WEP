@@ -1,0 +1,2 @@
+-- Finance integration is implemented using the existing Supply and ManufacturingOperation foreign keys.
+-- No schema change is required; this migration is intentionally a no-op so existing databases can deploy safely.

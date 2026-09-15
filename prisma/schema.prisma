@@ -1,0 +1,679 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PermissionEffect {
+  allow
+  deny
+}
+
+enum StockMovementType {
+  in
+  out
+  return
+  adjustment
+}
+
+model User {
+  id                    String                    @id
+  name                  String
+  email                 String                    @unique
+  passwordHash          String                    @map("password_hash")
+  roleId                String                    @map("role_id")
+  employeeId            String?                   @unique @map("employee_id")
+  status                String
+  lastLoginAt           DateTime?                 @map("last_login_at")
+  imageUrl              String?                   @map("image_url")
+  phone                 String?
+  job                   String?
+  createdAt             DateTime                  @default(now()) @map("created_at")
+  updatedAt             DateTime                  @updatedAt @map("updated_at")
+  role                  Role                      @relation(fields: [roleId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  employee              Employee?                 @relation(fields: [employeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  permissionOverrides   UserPermissionOverride[]
+  activityLogs          ActivityLog[]
+  reportActivityEvents  ReportActivityEvent[]
+  notifications         Notification[]
+
+  @@index([roleId])
+  @@index([status])
+  @@map("users")
+}
+
+model Role {
+  id              String                    @id
+  name            String
+  description     String
+  createdAt       DateTime                  @default(now()) @map("created_at")
+  updatedAt       DateTime                  @updatedAt @map("updated_at")
+  users           User[]
+  rolePermissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id                  String                    @id
+  section             String
+  action              String
+  label               String
+  description         String?
+  rolePermissions     RolePermission[]
+  userOverrides       UserPermissionOverride[]
+
+  @@unique([section, action])
+  @@index([section])
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id")
+  permissionId String     @map("permission_id")
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserPermissionOverride {
+  userId       String          @map("user_id")
+  permissionId String          @map("permission_id")
+  effect       PermissionEffect
+  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  permission   Permission      @relation(fields: [permissionId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@id([userId, permissionId])
+  @@map("user_permission_overrides")
+}
+
+model Employee {
+  id                    String                      @id
+  code                  String                      @unique
+  fullName              String                      @map("full_name")
+  email                 String
+  phone                 String
+  role                  String
+  department            String
+  hireDate              DateTime?                   @db.Date @map("hire_date")
+  salary                Decimal?                    @db.Decimal(14, 2)
+  status                String
+  imageUrl              String?                     @map("image_url")
+  notes                 String?
+  createdAt             DateTime                    @default(now()) @map("created_at")
+  updatedAt             DateTime                    @updatedAt @map("updated_at")
+  user                  User?
+  managedProjects       Project[]                   @relation("ProjectManager")
+  projectMemberships    ProjectMember[]
+  reports               Report[]
+  stockMovements        StockMovement[]
+  manufacturing         ManufacturingOperation[]
+  financeTransactions   FinanceTransaction[]
+  payrollRecords        PayrollRecord[]
+  organizationalRoles   CompanyOrganizationalRole[]
+
+  @@index([department])
+  @@index([status])
+  @@map("employees")
+}
+
+model Client {
+  id                  String               @id
+  code                String               @unique
+  name                String
+  company             String
+  email               String
+  phone               String
+  address             String?
+  clientType          String?              @map("client_type")
+  notes               String?
+  dateAdded           DateTime?            @db.Date @map("date_added")
+  status              String
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  projects            Project[]
+  supplies            Supply[]
+  stockMovements      StockMovement[]
+  financeTransactions FinanceTransaction[]
+
+  @@index([status])
+  @@map("clients")
+}
+
+model Supplier {
+  id                  String               @id
+  code                String               @unique
+  name                String
+  company             String?
+  contactName         String               @map("contact_name")
+  email               String
+  phone               String
+  address             String?
+  productsSnapshot    String?              @map("products_snapshot")
+  dateAdded           DateTime?            @db.Date @map("date_added")
+  status              String
+  notes               String?
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  products            WarehouseProduct[]
+  financeTransactions FinanceTransaction[]
+  stockMovements        StockMovement[]
+
+  @@index([status])
+  @@map("suppliers")
+}
+
+model Project {
+  id                    String                      @id
+  code                  String                      @unique
+  name                  String
+  description           String?
+  clientId              String?                     @map("client_id")
+  managerId             String?                     @map("manager_id")
+  status                String
+  budget                Decimal                     @db.Decimal(14, 2)
+  progress              Int
+  startDate             DateTime                    @db.Date @map("start_date")
+  dueDate               DateTime                    @db.Date @map("due_date")
+  createdAt             DateTime                    @default(now()) @map("created_at")
+  updatedAt             DateTime                    @updatedAt @map("updated_at")
+  client                Client?                     @relation(fields: [clientId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  manager               Employee?                   @relation("ProjectManager", fields: [managerId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  members               ProjectMember[]
+  reports               Report[]
+  supplies              Supply[]
+  manufacturing         ManufacturingOperation[]
+  financeTransactions   FinanceTransaction[]
+
+  @@index([clientId])
+  @@index([managerId])
+  @@index([status])
+  @@map("projects")
+}
+
+model ProjectMember {
+  projectId  String   @map("project_id")
+  employeeId String   @map("employee_id")
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@id([projectId, employeeId])
+  @@map("project_members")
+}
+
+model Supply {
+  id                    String                 @id
+  supplyNumber          String                 @unique @map("supply_number")
+  clientId              String                 @map("client_id")
+  projectId             String?                @map("project_id")
+  date                  DateTime               @db.Date
+  status                String
+  subtotalCost          Decimal                @db.Decimal(14, 2) @map("subtotal_cost")
+  subtotalSellingPrice  Decimal                @db.Decimal(14, 2) @map("subtotal_selling_price")
+  totalCost             Decimal                @db.Decimal(14, 2) @map("total_cost")
+  totalSellingPrice     Decimal                @db.Decimal(14, 2) @map("total_selling_price")
+  totalProfit            Decimal                @db.Decimal(14, 2) @map("total_profit")
+  paymentStatus         String                 @map("payment_status")
+  paidAmount             Decimal                @default(0) @db.Decimal(14, 2) @map("paid_amount")
+  notes                 String?
+  inventoryApplied      Boolean                @default(false) @map("inventory_applied")
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @updatedAt @map("updated_at")
+  client                Client                 @relation(fields: [clientId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  project               Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  items                 SupplyItem[]
+  timelineEvents       SupplyTimelineEvent[]
+  stockMovements        StockMovement[]
+  financeTransactions   FinanceTransaction[]
+
+  @@index([clientId])
+  @@index([projectId])
+  @@index([status])
+  @@map("supplies")
+}
+
+model SupplyItem {
+  id                 String           @id
+  supplyId           String           @map("supply_id")
+  productId          String           @map("product_id")
+  productName        String           @map("product_name")
+  quantity           Decimal          @db.Decimal(14, 3)
+  costPrice          Decimal          @db.Decimal(14, 2) @map("cost_price")
+  sellingPrice       Decimal          @db.Decimal(14, 2) @map("selling_price")
+  totalCost          Decimal          @db.Decimal(14, 2) @map("total_cost")
+  totalSellingPrice  Decimal          @db.Decimal(14, 2) @map("total_selling_price")
+  profit             Decimal          @db.Decimal(14, 2)
+  supply             Supply           @relation(fields: [supplyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  product            WarehouseProduct @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([productId])
+  @@map("supply_items")
+}
+
+model SupplyTimelineEvent {
+  id        String   @id
+  supplyId  String   @map("supply_id")
+  title     String
+  date      DateTime @db.Date
+  note      String?
+  supply    Supply   @relation(fields: [supplyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([supplyId, date])
+  @@map("supply_timeline_events")
+}
+
+model WarehouseProduct {
+  id                    String                      @id
+  code                  String                      @unique
+  name                  String
+  category              String
+  description           String?
+  currentQuantity       Decimal                     @db.Decimal(14, 3) @map("current_quantity")
+  minimumQuantity       Decimal                     @db.Decimal(14, 3) @map("minimum_quantity")
+  unit                  String
+  purchasePrice         Decimal                     @db.Decimal(14, 2) @map("purchase_price")
+  sellingPrice          Decimal?                    @db.Decimal(14, 2) @map("selling_price")
+  currency              String                      @default("EGP")
+  storageLocation       String                      @map("storage_location")
+  supplierId            String?                     @map("supplier_id")
+  supplierNameSnapshot  String?                     @map("supplier_name_snapshot")
+  imageUrl              String?                     @map("image_url")
+  createdAt             DateTime                    @default(now()) @map("created_at")
+  updatedAt             DateTime                    @updatedAt @map("updated_at")
+  supplier              Supplier?                   @relation(fields: [supplierId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  supplyItems           SupplyItem[]
+  stockMovements        StockMovement[]
+  manufacturingMaterials ManufacturingMaterial[]
+
+  @@index([supplierId])
+  @@index([category])
+  @@map("warehouse_products")
+}
+
+model StockMovement {
+  id                       String                    @id
+  number                   String?                   @unique
+  productId                String                    @map("product_id")
+  clientId                 String?                   @map("client_id")
+  type                     StockMovementType
+  quantity                 Decimal                   @db.Decimal(14, 3)
+  date                     DateTime                  @db.Date
+  employeeId               String                    @map("employee_id")
+  reason                   String
+  supplierId               String?                   @map("supplier_id")
+  unitCost                 Decimal?                  @db.Decimal(14, 2) @map("unit_cost")
+  sellingPrice              Decimal?                  @db.Decimal(14, 2) @map("selling_price")
+  notes                    String?
+  supplyId                 String?                   @map("supply_id")
+  manufacturingOperationId String?                   @map("manufacturing_operation_id")
+  createdAt                DateTime                  @default(now()) @map("created_at")
+  product                  WarehouseProduct          @relation(fields: [productId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  client                   Client?                   @relation(fields: [clientId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  employee                 Employee                  @relation(fields: [employeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  supplier                 Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  supply                   Supply?                   @relation(fields: [supplyId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  manufacturingOperation   ManufacturingOperation?  @relation(fields: [manufacturingOperationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  financeTransactions     FinanceTransaction[]
+
+  @@index([productId, date])
+  @@index([clientId])
+  @@index([employeeId])
+  @@index([supplierId])
+  @@index([supplyId])
+  @@index([manufacturingOperationId])
+  @@map("stock_movements")
+}
+
+model Report {
+  id                  String                @id
+  code                String                @unique
+  title               String
+  type                String
+  projectId           String?               @map("project_id")
+  employeeId          String?               @map("employee_id")
+  description         String?
+  content             String?
+  status              String
+  createdAt           DateTime              @default(now()) @map("created_at")
+  updatedAt           DateTime              @updatedAt @map("updated_at")
+  project             Project?              @relation(fields: [projectId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  employee            Employee?             @relation(fields: [employeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  attachments         ReportAttachment[]
+  activityEvents      ReportActivityEvent[]
+
+  @@index([projectId])
+  @@index([employeeId])
+  @@index([status])
+  @@map("reports")
+}
+
+model ReportAttachment {
+  id        String   @id
+  reportId  String   @map("report_id")
+  fileName  String   @map("file_name")
+  fileUrl   String   @map("file_url")
+  mimeType  String?  @map("mime_type")
+  fileSize  Int?     @map("file_size")
+  createdAt DateTime @default(now()) @map("created_at")
+  report    Report   @relation(fields: [reportId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([reportId])
+  @@map("report_attachments")
+}
+
+model ReportActivityEvent {
+  id          String   @id
+  reportId    String   @map("report_id")
+  userId      String?  @map("user_id")
+  action      String
+  description String
+  createdAt   DateTime @default(now()) @map("created_at")
+  report      Report   @relation(fields: [reportId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([reportId, createdAt])
+  @@index([userId])
+  @@map("report_activity_events")
+}
+
+model ManufacturingOperation {
+  id                    String                   @id
+  code                  String                   @unique
+  name                  String
+  description           String?
+  projectId             String                   @map("project_id")
+  employeeId            String                   @map("employee_id")
+  status                String
+  progress              Int
+  cost                  Decimal                  @db.Decimal(14, 2)
+  materialCost          Decimal                 @default(0) @db.Decimal(14, 2) @map("material_cost")
+  currency              String                   @default("EGP")
+  startDate             DateTime                 @db.Date @map("start_date")
+  expectedEndDate       DateTime                 @db.Date @map("expected_end_date")
+  createdAt             DateTime                 @default(now()) @map("created_at")
+  updatedAt             DateTime                 @updatedAt @map("updated_at")
+  project               Project                  @relation(fields: [projectId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  employee              Employee                @relation(fields: [employeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  materials             ManufacturingMaterial[]
+  stages                ManufacturingStage[]
+  stockMovements        StockMovement[]
+  financeTransactions   FinanceTransaction[]
+
+  @@index([projectId])
+  @@index([employeeId])
+  @@index([status])
+  @@map("manufacturing_operations")
+}
+
+model ManufacturingMaterial {
+  id                       String                  @id
+  manufacturingOperationId String                  @map("manufacturing_operation_id")
+  productId                String?                 @map("product_id")
+  productCode              String?                 @map("product_code")
+  requiredQuantity         Decimal                 @db.Decimal(14, 3) @map("required_quantity")
+  usedQuantity             Decimal                 @db.Decimal(14, 3) @map("used_quantity")
+  unit                     String
+  cost                     Decimal                 @db.Decimal(14, 2)
+  currency                 String                  @default("EGP")
+  manufacturingOperation  ManufacturingOperation  @relation(fields: [manufacturingOperationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  product                  WarehouseProduct?      @relation(fields: [productId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([manufacturingOperationId])
+  @@index([productId])
+  @@index([productCode])
+  @@map("manufacturing_materials")
+}
+
+model ManufacturingStage {
+  id                       String                 @id
+  manufacturingOperationId String                 @map("manufacturing_operation_id")
+  name                     String
+  status                   String
+  progress                 Int?
+  startDate                DateTime?              @db.Date @map("start_date")
+  completedAt              DateTime?              @map("completed_at")
+  sortOrder                Int                    @default(0) @map("sort_order")
+  ownerNameSnapshot        String?                @map("owner_name_snapshot")
+  manufacturingOperation  ManufacturingOperation @relation(fields: [manufacturingOperationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([manufacturingOperationId, sortOrder])
+  @@map("manufacturing_stages")
+}
+
+model FinanceTransaction {
+  id                       String                   @id
+  number                   String                   @unique
+  name                     String
+  type                     String
+  category                 String
+  projectId                String?                  @map("project_id")
+  clientId                 String?                  @map("client_id")
+  supplierId               String?                  @map("supplier_id")
+  employeeId               String?                  @map("employee_id")
+  manufacturingOperationId String?                  @map("manufacturing_operation_id")
+  payrollId                String?                  @unique @map("payroll_id")
+  stockMovementId         String?                  @map("stock_movement_id")
+  supplyId                 String?                  @map("supply_id")
+  supplierNameSnapshot     String?                  @map("supplier_name_snapshot")
+  amount                   Decimal                  @db.Decimal(14, 2)
+  currency                 String                   @default("EGP")
+  date                     DateTime                 @db.Date
+  dueDate                  DateTime?                @db.Date @map("due_date")
+  status                   String
+  paymentMethod            String?                  @map("payment_method")
+  description              String?
+  notes                    String?
+  createdAt                DateTime                 @default(now()) @map("created_at")
+  updatedAt                DateTime                 @updatedAt @map("updated_at")
+  project                  Project?                 @relation(fields: [projectId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  client                   Client?                  @relation(fields: [clientId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  supplier                 Supplier?                @relation(fields: [supplierId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  employee                 Employee?                @relation(fields: [employeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  manufacturingOperation   ManufacturingOperation? @relation(fields: [manufacturingOperationId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  payroll                  PayrollRecord?           @relation(fields: [payrollId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  stockMovement            StockMovement?           @relation(fields: [stockMovementId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  supply                   Supply?                  @relation(fields: [supplyId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([projectId])
+  @@index([clientId])
+  @@index([supplierId])
+  @@index([employeeId])
+  @@index([manufacturingOperationId])
+  @@index([payrollId])
+  @@index([supplyId])
+  @@map("finance_transactions")
+}
+
+model PayrollRecord {
+  id             String             @id
+  number         String             @unique
+  employeeId     String             @map("employee_id")
+  periodStart    DateTime           @db.Date @map("period_start")
+  periodEnd      DateTime           @db.Date @map("period_end")
+  basicSalary    Decimal            @db.Decimal(14, 2) @map("basic_salary")
+  allowances     Decimal            @default(0) @db.Decimal(14, 2)
+  deductions     Decimal            @default(0) @db.Decimal(14, 2)
+  netSalary      Decimal            @db.Decimal(14, 2) @map("net_salary")
+  status         String
+  paymentMethod  String?            @map("payment_method")
+  paidAt        DateTime?          @db.Date @map("paid_at")
+  notes          String?
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  employee       Employee           @relation(fields: [employeeId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  financeTransaction FinanceTransaction?
+
+  @@unique([employeeId, periodStart, periodEnd])
+  @@index([employeeId, periodStart, periodEnd])
+  @@index([status])
+  @@map("payroll_records")
+}
+
+model ProfitSnapshot {
+  id          String   @id
+  periodStart DateTime @db.Date @map("period_start")
+  periodEnd   DateTime @db.Date @map("period_end")
+  revenue     Decimal  @db.Decimal(14, 2)
+  expenses    Decimal  @db.Decimal(14, 2)
+  netProfit   Decimal  @db.Decimal(14, 2) @map("net_profit")
+  currency    String   @default("EGP")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([periodStart, periodEnd])
+  @@map("profit_snapshots")
+}
+
+model Company {
+  id                    String                      @id
+  name                  String
+  summary               String
+  industry              String
+  foundedYear           Int                         @map("founded_year")
+  headquarters          String
+  email                 String?
+  phone                 String?
+  address               String?
+  logoUrl               String?                     @map("logo_url")
+  vision                String?
+  mission               String?
+  createdAt             DateTime                    @default(now()) @map("created_at")
+  updatedAt             DateTime                    @updatedAt @map("updated_at")
+  documents             CompanyDocument[]
+  goals                 CompanyGoal[]
+  timelineEvents        CompanyTimelineEvent[]
+  galleryItems          CompanyGalleryItem[]
+  organizationalRoles   CompanyOrganizationalRole[]
+  values                CompanyValue[]
+
+  @@map("companies")
+}
+
+model CompanyValue {
+  id          String   @id
+  companyId   String   @map("company_id")
+  title       String
+  description String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([companyId])
+  @@map("company_values")
+}
+
+model CompanyDocument {
+  id          String    @id
+  companyId   String    @map("company_id")
+  name        String
+  type        String
+  status      String
+  description String?
+  fileUrl     String?   @map("file_url")
+  issueDate   DateTime? @db.Date @map("issue_date")
+  expiryDate  DateTime? @db.Date @map("expiry_date")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([companyId])
+  @@map("company_documents")
+}
+
+model CompanyGoal {
+  id          String    @id
+  companyId   String    @map("company_id")
+  title       String
+  description String
+  status      String
+  targetDate  DateTime? @db.Date @map("target_date")
+  period      String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([companyId])
+  @@map("company_goals")
+}
+
+model CompanyTimelineEvent {
+  id          String   @id
+  companyId   String   @map("company_id")
+  title       String
+  description String
+  type        String
+  date        DateTime @db.Date
+  createdAt   DateTime @default(now()) @map("created_at")
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([companyId, date])
+  @@map("company_timeline_events")
+}
+
+model CompanyGalleryItem {
+  id          String   @id
+  companyId   String   @map("company_id")
+  title       String
+  description String?
+  category    String
+  imageUrl    String   @map("image_url")
+  createdAt   DateTime @default(now()) @map("created_at")
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+
+  @@index([companyId, category])
+  @@map("company_gallery_items")
+}
+
+model CompanyOrganizationalRole {
+  id          String    @id
+  companyId   String    @map("company_id")
+  name        String?
+  title       String
+  department  String?
+  description String?
+  employeeId  String?   @map("employee_id")
+  sortOrder   Int       @default(0) @map("sort_order")
+  imageUrl    String?   @map("image_url")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  employee    Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([companyId, sortOrder])
+  @@index([employeeId])
+  @@map("company_organizational_roles")
+}
+
+model ActivityLog {
+  id          String   @id
+  userId      String?  @map("user_id")
+  action      String
+  module      String
+  entityType  String   @map("entity_type")
+  entityId    String   @map("entity_id")
+  description String
+  createdAt   DateTime @default(now()) @map("created_at")
+  metadata    Json?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
+  @@index([module, createdAt])
+  @@map("activity_logs")
+}
+
+model Notification {
+  id          String   @id
+  userId      String   @map("user_id")
+  title       String
+  description String
+  read        Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+  href        String?
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
+  @@index([userId, read, createdAt])
+  @@map("notifications")
+}
