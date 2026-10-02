@@ -258,6 +258,31 @@ export const warehouseRepository = {
       }
       return movement;
     }).then(serialize),
+    delete: (id: string) => prisma.$transaction(async (transaction) => {
+      const movement = await transaction.stockMovement.findUnique({ where: { id } });
+      if (!movement) throw new Error('NOT_FOUND');
+      if (movement.supplyId || movement.manufacturingOperationId) throw new Error('LINKED_MOVEMENT');
+
+      const quantity = new Prisma.Decimal(String(movement.quantity));
+      const delta = movement.type === 'out' ? quantity : quantity.negated();
+      const product = await transaction.warehouseProduct.updateMany({
+        where: { id: movement.productId, ...(delta.isNegative() ? { currentQuantity: { gte: delta.abs() } } : {}) },
+        data: { currentQuantity: { increment: delta } },
+      });
+      if (product.count !== 1) throw new Error('MOVEMENT_DELETE_STOCK_CONFLICT');
+
+      await transaction.financeTransaction.deleteMany({ where: { stockMovementId: id } });
+      await transaction.stockMovement.delete({ where: { id } });
+    }),
+    deleteAll: () => prisma.$transaction(async (transaction) => {
+      const movements = await transaction.stockMovement.findMany({ select: { id: true } });
+      const ids = movements.map((movement) => movement.id);
+      if (ids.length) {
+        await transaction.financeTransaction.deleteMany({ where: { stockMovementId: { in: ids } } });
+        await transaction.stockMovement.deleteMany();
+      }
+      return ids.length;
+    }, { maxWait: 10_000, timeout: 60_000 }),
   },
 };
 

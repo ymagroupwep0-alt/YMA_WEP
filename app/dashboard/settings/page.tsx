@@ -2,7 +2,7 @@
 'use client';
 
 import { ChangeEvent, FormEvent, useEffect, useState } from 'react';
-import { Building2, Check, LockKeyhole, Pencil, Plus, ShieldCheck, UserRound, Users, X } from 'lucide-react';
+import { Building2, Check, Download, LockKeyhole, Pencil, Plus, ShieldCheck, Trash2, UserRound, Users, X } from 'lucide-react';
 import { UserFormModal, UserFormValues } from '@/components/settings/user-form-modal';
 import { UserStatusBadge } from '@/components/settings/user-status-badge';
 import { permissions, RoleId, roles as initialRoles, SystemUser, UserStatus } from '@/data/settings';
@@ -42,10 +42,18 @@ export default function SettingsPage() {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [passwordError, setPasswordError] = useState('');
+  const [exportLoading, setExportLoading] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetConfirmation, setResetConfirmation] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState('');
 
   const [settingsError, setSettingsError] = useState('');
   const baseRole = roles.find((role) => role.id === selectedRole) ?? roles[0];
   const currentRole = { ...baseRole, permissionIds: rolePermissions[selectedRole] ?? baseRole.permissionIds };
+  const isAdmin = users.find((user) => user.id === currentUserId)?.roleId === 'admin';
 
   const updateAccount = <K extends keyof typeof initialAccount>(field: K, value: string) => {
     setAccount((current) => ({ ...current, [field]: value }));
@@ -132,6 +140,53 @@ export default function SettingsPage() {
     }
   };
 
+  const handleExport = async () => {
+    setExportLoading(true);
+    setExportError('');
+    try {
+      const response = await fetch('/api/settings/export');
+      if (!response.ok) {
+        const error = await response.json() as { error?: string };
+        throw new Error(error.error ?? 'تعذر تحميل نسخة النظام');
+      }
+      const file = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = file;
+      link.download = `YMA_System_Export_${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(file);
+    } catch (reason) {
+      setExportError(reason instanceof Error ? reason.message : 'تعذر تحميل نسخة النظام');
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
+  const handleResetData = async () => {
+    if (!isAdmin || resetConfirmation !== 'حذف بيانات النظام') return;
+    setResetLoading(true);
+    setResetError('');
+    try {
+      const response = await fetch('/api/settings/reset-data', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirmation: resetConfirmation }),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(result.error ?? 'تعذر حذف بيانات النظام');
+      setResetOpen(false);
+      setResetConfirmation('');
+      setResetSuccess('تم حذف بيانات النظام. جار تحديث الصفحة...');
+      window.setTimeout(() => window.location.reload(), 1000);
+    } catch (reason) {
+      setResetError(reason instanceof Error ? reason.message : 'تعذر حذف بيانات النظام');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   const image = async (field: 'imageUrl' | 'logoUrl', event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -182,13 +237,19 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <p className="text-sm font-medium text-blue-600">إدارة النظام</p>
-        <h1 className="mt-1 text-3xl font-bold text-slate-900">الإعدادات</h1>
-        <p className="mt-2 text-sm text-slate-500">أدر حسابك وبيانات الشركة والمستخدمين والأدوار من مكان واحد.</p>
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+        <div>
+          <p className="text-sm font-medium text-blue-600">إدارة النظام</p>
+          <h1 className="mt-1 text-3xl font-bold text-slate-900">الإعدادات</h1>
+          <p className="mt-2 text-sm text-slate-500">أدر حسابك وبيانات الشركة والمستخدمين والأدوار من مكان واحد.</p>
+        </div>
+        {isAdmin && <button type="button" onClick={() => void handleExport()} disabled={exportLoading} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:cursor-wait disabled:opacity-60"><Download className="h-4 w-4" />{exportLoading ? 'جار تجهيز النسخة...' : 'تحميل بيانات النظام كاملة'}</button>}
       </div>
 
+      {exportError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{exportError}</div>}
       {userError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{userError}</div>}
+      {resetError && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{resetError}</div>}
+      {resetSuccess && <div role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{resetSuccess}</div>}
 
       <div className="grid gap-6 xl:grid-cols-2">
         <section className="card-surface p-5">
@@ -362,6 +423,42 @@ export default function SettingsPage() {
           </div>
         </section>
       </div>
+
+      {isAdmin && <section className="rounded-2xl border border-rose-200 bg-rose-50/70 p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="font-bold text-rose-900">حذف بيانات النظام</h2>
+            <p className="mt-1 max-w-3xl text-sm leading-6 text-rose-800">يحذف المشاريع والمخزون والحركات والتقارير والمالية والرواتب وبيانات الشركة وسجلات النشاط. يحتفظ ببيانات الموظفين والعملاء والموردين، وحسابات المستخدمين والصلاحيات لتبقى قادرًا على تسجيل الدخول.</p>
+            <p className="mt-1 text-xs text-rose-700">الحذف يشمل سجلات قاعدة البيانات فقط؛ الملفات والصور المرفوعة في التخزين لا تُحذف.</p>
+          </div>
+          <button type="button" onClick={() => { setResetError(''); setResetConfirmation(''); setResetOpen(true); }} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-rose-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-800">
+            <Trash2 className="h-4 w-4" />
+            حذف بيانات النظام
+          </button>
+        </div>
+      </section>}
+
+      {resetOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4" role="presentation">
+        <section role="dialog" aria-modal="true" aria-labelledby="reset-data-title" className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 id="reset-data-title" className="text-lg font-bold text-rose-800">تأكيد حذف بيانات النظام</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">هذا الحذف نهائي ولا يمكن التراجع عنه. ستبقى بيانات الموظفين والعملاء والموردين وحسابات الدخول والصلاحيات فقط.</p>
+            </div>
+            <button type="button" onClick={() => setResetOpen(false)} disabled={resetLoading} aria-label="إغلاق" className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 disabled:opacity-50"><X className="h-5 w-5" /></button>
+          </div>
+          <label className="mt-5 block text-sm font-medium text-slate-700">اكتب «حذف بيانات النظام» للتأكيد
+            <input autoComplete="off" value={resetConfirmation} onChange={(event) => setResetConfirmation(event.target.value)} className={`${inputClass} mt-2`} />
+          </label>
+          <div className="mt-5 flex justify-end gap-3">
+            <button type="button" onClick={() => setResetOpen(false)} disabled={resetLoading} className="rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50">إلغاء</button>
+            <button type="button" onClick={() => void handleResetData()} disabled={resetLoading || resetConfirmation !== 'حذف بيانات النظام'} className="inline-flex items-center gap-2 rounded-xl bg-rose-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-800 disabled:cursor-not-allowed disabled:opacity-50">
+              <Trash2 className="h-4 w-4" />
+              {resetLoading ? 'جار الحذف...' : 'تأكيد الحذف النهائي'}
+            </button>
+          </div>
+        </section>
+      </div>}
 
       {userOpen && <UserFormModal open={userOpen} onClose={() => { setUserOpen(false); setSelectedUser(null); }} onSubmit={saveUser} user={selectedUser} />}
     </div>

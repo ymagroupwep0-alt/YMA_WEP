@@ -30,6 +30,8 @@ export type StockMovement = {
   employeeName: string;
   reason: string;
   supplierId?: string;
+  supplyId?: string | null;
+  manufacturingOperationId?: string | null;
   unitCost?: number;
   sellingPrice?: number;
   notes: string;

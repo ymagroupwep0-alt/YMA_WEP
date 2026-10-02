@@ -68,6 +68,8 @@ const recordMutation = async (resource: string, action: 'created' | 'updated' | 
 function errorResponse(error: unknown) {
   if (error instanceof AuthorizationError) return NextResponse.json({ error: error.message }, { status: error.status });
   if (error instanceof Error && error.message === 'INSUFFICIENT_STOCK') return NextResponse.json({ error: 'الكمية المتاحة غير كافية' }, { status: 409 });
+  if (error instanceof Error && error.message === 'MOVEMENT_DELETE_STOCK_CONFLICT') return NextResponse.json({ error: 'لا يمكن حذف الحركة لأن ذلك سيجعل رصيد المنتج سالبًا' }, { status: 409 });
+  if (error instanceof Error && error.message === 'LINKED_MOVEMENT') return NextResponse.json({ error: 'هذه الحركة مرتبطة بتوريد أو تصنيع؛ احذف العملية الأصلية بدلًا منها' }, { status: 409 });
   if (error instanceof Error && error.message === 'EMPLOYEE_LINK_REQUIRED') return NextResponse.json({ error: 'يجب ربط المستخدم بموظف قبل تسجيل حركة مخزون' }, { status: 422 });
   if (error instanceof Error && error.message === 'PASSWORD_REQUIRED') return NextResponse.json({ error: 'كلمة المرور مطلوبة' }, { status: 422 });
   if (error instanceof Error && error.message === 'INVALID_PERMISSION') return NextResponse.json({ error: 'صلاحية غير صحيحة' }, { status: 422 });
@@ -272,6 +274,18 @@ export async function DELETE(request: Request, context: { params: Promise<{ path
     const resource = params.path[0];
     const id = params.path[1];
     const user = await requirePermission(permissionForResource(resource), 'delete');
+    if (resource === 'movements') {
+      if (user.roleId !== 'admin') return NextResponse.json({ error: 'حذف حركات المخزون مسموح لمدير النظام فقط' }, { status: 403 });
+      if (id === 'all') {
+        const deletedCount = await warehouseRepository.movements.deleteAll();
+        await recordMutation(resource, 'deleted', 'all');
+        return NextResponse.json({ success: true, deletedCount });
+      }
+      if (!id) return NextResponse.json({ error: 'معرّف الحركة غير صحيح' }, { status: 422 });
+      await warehouseRepository.movements.delete(id);
+      await recordMutation(resource, 'deleted', id);
+      return NextResponse.json({ success: true });
+    }
     if (resource === 'payroll' && user.roleId !== 'admin') return NextResponse.json({ error: 'إدارة وحذف الرواتب مسموح لمدير النظام فقط' }, { status: 403 });
     if (resource === 'activity') {
       if (user.roleId !== 'admin') return NextResponse.json({ error: 'حذف سجل النشاط مسموح لمدير النظام فقط' }, { status: 403 });

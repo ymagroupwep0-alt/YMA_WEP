@@ -14,10 +14,19 @@ export function DashboardLayout({ children, user }: { children: React.ReactNode;
     <PermissionsProvider currentUserId={user.id}>
       <div className="min-h-screen bg-slate-100">
       <div className="flex">
-        <div className={`fixed inset-y-0 right-0 z-40 w-72 transform transition-transform duration-300 lg:hidden ${mobileOpen ? 'translate-x-0' : 'translate-x-full'} `}>
-          <div className="h-full bg-slate-950 p-5 text-white">
-            <Sidebar mobile />
-          </div>
+        {mobileOpen && (
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            className="fixed inset-0 z-30 bg-slate-950/50 lg:hidden"
+            aria-label="إغلاق القائمة"
+          />
+        )}
+        <div
+          aria-hidden={!mobileOpen}
+          className={`invisible fixed inset-y-0 right-0 z-40 w-72 max-w-[calc(100vw-3rem)] transform transition-transform duration-300 lg:hidden ${mobileOpen ? 'visible translate-x-0' : 'translate-x-full'}`}
+        >
+          <Sidebar mobile onClose={() => setMobileOpen(false)} />
         </div>
 
         <div className="hidden lg:block">

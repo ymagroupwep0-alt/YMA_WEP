@@ -26,11 +26,13 @@ import {
 import { StockStatusBadge } from "@/components/warehouse/stock-status-badge";
 import { getStockStatus, StockMovement, stockMovementTypeLabels, WarehouseProduct } from "@/data/warehouse";
 import { usePermissionGuard } from "@/components/permissions/use-permission-guard";
+import { usePermissions } from "@/components/permissions/permissions-provider";
 import { usePersistentList } from "@/lib/client/use-persistent-list";
 import type { Employee } from "@/data/employees";
 
 export default function WarehousePage() {
   const { check, can } = usePermissionGuard("warehouse");
+  const { currentUserId, users } = usePermissions();
   const productsList = usePersistentList<WarehouseProduct>("products");
   const movementsList = usePersistentList<StockMovement>("movements");
   const employeesList = usePersistentList<Employee>("employees");
@@ -48,6 +50,10 @@ export default function WarehousePage() {
   const [category, setCategory] = useState("all");
   const [stockStatus, setStockStatus] = useState("all");
   const [supplier, setSupplier] = useState("all");
+  const [movementError, setMovementError] = useState("");
+  const [deletingMovementId, setDeletingMovementId] = useState("");
+  const [deletingAllMovements, setDeletingAllMovements] = useState(false);
+  const isAdmin = users.find((user) => user.id === currentUserId)?.roleId === "admin";
   const categories = useMemo(
     () => Array.from(new Set(products.map((product) => product.category))),
     [products],
@@ -120,6 +126,36 @@ export default function WarehousePage() {
     const response = await fetch(`/api/data/products/${product.id}`, { method: "DELETE" });
     if (!response.ok) return;
     await productsList.refresh();
+  };
+  const deleteMovement = async (movement: StockMovement) => {
+    if (!isAdmin || !check("delete")) return;
+    if (!window.confirm("سيتم حذف الحركة وعكس أثرها على رصيد المنتج وحذف قيودها المالية المرتبطة. هل تريد المتابعة؟")) return;
+    setMovementError("");
+    setDeletingMovementId(movement.id);
+    try {
+      const response = await fetch(`/api/data/movements/${movement.id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error ?? "تعذر حذف حركة المخزون");
+      await Promise.all([productsList.refresh(), movementsList.refresh()]);
+    } catch (error) {
+      setMovementError(error instanceof Error ? error.message : "تعذر حذف حركة المخزون");
+    } finally {
+      setDeletingMovementId("");
+    }
+  };
+  const deleteAllMovements = async () => {
+    if (!isAdmin || !check("delete")) return;
+    if (!window.confirm("سيتم حذف سجل جميع حركات المخزون والقيود المالية المرتبطة بها، مع الاحتفاظ بأرصدة المنتجات الحالية. هل تريد المتابعة؟")) return;
+    setMovementError("");
+    setDeletingAllMovements(true);
+    try {
+      const response = await fetch("/api/data/movements/all", { method: "DELETE" });
+      if (!response.ok) throw new Error(((await response.json()) as { error?: string }).error ?? "تعذر حذف حركات المخزون");
+      await movementsList.refresh();
+    } catch (error) {
+      setMovementError(error instanceof Error ? error.message : "تعذر حذف حركات المخزون");
+    } finally {
+      setDeletingAllMovements(false);
+    }
   };
   const movementIcon = {
     in: ArrowDownToLine,
@@ -414,14 +450,18 @@ export default function WarehousePage() {
               كل عمليات الإضافة والصرف والمرتجع وتعديل الكميات.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => openMovement()}
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          >
-            تسجيل حركة
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            {isAdmin && can("delete") && <button type="button" onClick={() => void deleteAllMovements()} disabled={deletingAllMovements || movements.length === 0} className="rounded-xl border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50">{deletingAllMovements ? "جار الحذف..." : "حذف كل الحركات"}</button>}
+            <button
+              type="button"
+              onClick={() => openMovement()}
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              تسجيل حركة
+            </button>
+          </div>
         </div>
+        {movementError && <div role="alert" className="border-b border-rose-100 bg-rose-50 px-5 py-3 text-sm text-rose-700">{movementError}</div>}
         <div className="overflow-x-auto">
           <table className="data-table min-w-[900px] w-full text-sm">
             <thead className="bg-slate-50">
@@ -434,6 +474,7 @@ export default function WarehousePage() {
                   "التاريخ",
                   "الموظف",
                   "السبب",
+                  ...(isAdmin && can("delete") ? ["الإجراء"] : []),
                 ].map((heading) => (
                   <th key={heading} className="table-header px-4 py-3">
                     {heading}
@@ -470,6 +511,18 @@ export default function WarehousePage() {
                     <td className="px-4 py-3 text-slate-600">
                       {movement.reason}
                     </td>
+                    {isAdmin && can("delete") && <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => void deleteMovement(movement)}
+                        disabled={Boolean(movement.supplyId || movement.manufacturingOperationId) || deletingMovementId === movement.id}
+                        title={movement.supplyId || movement.manufacturingOperationId ? "احذف الحركة من عملية التوريد أو التصنيع المرتبطة بها" : "حذف الحركة وعكس أثرها على الرصيد"}
+                        aria-label={`حذف حركة ${movement.number}`}
+                        className="rounded-lg p-2 text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>}
                   </tr>
                 );
               })}
