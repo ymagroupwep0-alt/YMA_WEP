@@ -18,13 +18,13 @@ export function DashboardLayout({ children, user }: { children: React.ReactNode;
           <button
             type="button"
             onClick={() => setMobileOpen(false)}
-            className="fixed inset-0 z-30 bg-slate-950/50 lg:hidden"
+            className="fixed inset-0 z-40 bg-slate-950/50 lg:hidden"
             aria-label="إغلاق القائمة"
           />
         )}
         <div
           aria-hidden={!mobileOpen}
-          className={`invisible fixed inset-y-0 right-0 z-40 w-72 max-w-[calc(100vw-3rem)] transform transition-transform duration-300 lg:hidden ${mobileOpen ? 'visible translate-x-0' : 'translate-x-full'}`}
+          className={`fixed inset-y-0 right-0 z-50 w-72 max-w-[calc(100vw-3rem)] transform transition-transform duration-300 lg:hidden ${mobileOpen ? 'pointer-events-auto translate-x-0' : 'pointer-events-none translate-x-full'}`}
         >
           <Sidebar mobile onClose={() => setMobileOpen(false)} />
         </div>
